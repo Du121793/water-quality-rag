@@ -1,0 +1,16 @@
+services:
+  ai-pgvector:
+    image: pgvector/pgvector:pg15
+    container_name: fish-helper-ai-pgvector
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_helper_db
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: asdasd
+    ports:
+      - "5433:5432"
+    volumes:
+      - ai_pgvector_data:/var/lib/postgresql/data
+
+volumes:
+  ai_pgvector_data:

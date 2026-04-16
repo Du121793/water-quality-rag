@@ -1,0 +1,36 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: fish-helper-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+
+  ollama-init-embedding:
+    image: ollama/ollama:latest
+    container_name: fish-helper-ollama-init-embedding
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_AUTO_PULL_MODEL: ${OLLAMA_AUTO_PULL_MODEL:-false}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text-v2-moe:latest}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        if [ "$OLLAMA_AUTO_PULL_MODEL" = "true" ]; then
+          echo "開始自動拉取模型: $OLLAMA_EMBEDDING_MODEL";
+          sleep 5;
+          ollama pull "$OLLAMA_EMBEDDING_MODEL";
+        else
+          echo "已停用自動拉取模型";
+        fi
+    restart: "no"
+
+volumes:
+  ollama_data:
