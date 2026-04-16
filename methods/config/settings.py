@@ -97,6 +97,9 @@ class Settings:
     rag_min_total_characters: int = _as_int(os.getenv("RAG_MIN_TOTAL_CHARACTERS"), 1800)
     time_window_max_days: int = _as_int(os.getenv("TIME_WINDOW_MAX_DAYS"), 31)
     time_window_max_points: int = _as_int(os.getenv("TIME_WINDOW_MAX_POINTS"), 500)
+    autonomous_time_window_fetch_enabled: bool = _as_bool(os.getenv("AUTONOMOUS_TIME_WINDOW_FETCH_ENABLED"), True)
+    autonomous_time_window_max_rounds: int = _as_int(os.getenv("AUTONOMOUS_TIME_WINDOW_MAX_ROUNDS"), 2)
+    autonomous_time_window_max_metrics: int = _as_int(os.getenv("AUTONOMOUS_TIME_WINDOW_MAX_METRICS"), 4)
 
 
 settings = Settings()

@@ -5,11 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from SQL_Controller.ai_audit_logs import (
-    complete_ai_audit_log,
-    create_ai_audit_log,
-    fail_ai_audit_log,
-)
+from SQL_Controller.ai_audit_logs import complete_ai_audit_log, create_ai_audit_log, fail_ai_audit_log
 from SQL_Controller.chat_sessions import (
     delete_chat_session,
     ensure_chat_session,
@@ -28,11 +24,8 @@ from methods.ai.conversation_memory import (
     render_session_summary_text,
     trim_chat_history_by_budget,
 )
-from methods.ai.llm_stream import (
-    generate_web_search_response,
-    stream_chat_tokens,
-    yield_text_in_chunks,
-)
+from methods.ai.llm_stream import generate_web_search_response, stream_chat_tokens, yield_text_in_chunks
+from methods.ai.secondary_fetch import maybe_run_autonomous_time_window_fetch
 from methods.base.logger import error, info, warn
 from methods.base.schemas import ChatStreamRequest
 from methods.base.sse import format_sse
@@ -41,7 +34,7 @@ from methods.config.settings import settings
 router = APIRouter()
 
 
-def _has_meaningful_session_summary(summary_state: dict) -> bool:
+def has_meaningful_session_summary(summary_state: dict) -> bool:
     return bool(
         summary_state.get("current_goal")
         or summary_state.get("confirmed_facts")
@@ -51,7 +44,7 @@ def _has_meaningful_session_summary(summary_state: dict) -> bool:
     )
 
 
-def _build_time_window_summary(context: dict) -> dict:
+def build_time_window_summary(context: dict) -> dict:
     time_window = context.get("time_window_trend") or {}
     if not time_window or not time_window.get("requested"):
         return {
@@ -89,10 +82,7 @@ async def list_sessions(
 ):
     resolved_user_id = await resolve_web_user_id(request, user_id)
     sessions = await list_chat_sessions_by_user(resolved_user_id, limit=limit)
-    return {
-        "success": True,
-        "data": sessions,
-    }
+    return {"success": True, "data": sessions}
 
 
 @router.get("/sessions/{session_id}")
@@ -103,10 +93,8 @@ async def get_session_detail(
 ):
     resolved_user_id = await resolve_web_user_id(request, user_id)
     session = await get_chat_session(session_id)
-
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-
     if int(session["user_id"]) != resolved_user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this session.")
 
@@ -127,18 +115,13 @@ async def remove_session(
 ):
     resolved_user_id = await resolve_web_user_id(request, user_id)
     session = await get_chat_session(session_id)
-
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-
     if int(session["user_id"]) != resolved_user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this session.")
 
     await delete_chat_session(session_id)
-    return {
-        "success": True,
-        "message": "Session deleted.",
-    }
+    return {"success": True, "message": "Session deleted."}
 
 
 @router.post("/chat/stream")
@@ -156,6 +139,7 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
         conversation_history_stats: dict = {}
         session_summary_state: dict = {}
         session_summary_text = ""
+        autonomous_fetch_summary: dict = {"enabled": False, "executed_rounds": 0, "plans": []}
 
         try:
             info("AI對話", f"開始處理 request_id={request_id}", request.client.host if request.client else "")
@@ -227,7 +211,13 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
             context["conversation_history_count"] = len(conversation_history)
             context["conversation_history_stats"] = conversation_history_stats
 
-            time_window_summary = _build_time_window_summary(context)
+            context, autonomous_fetch_summary = await maybe_run_autonomous_time_window_fetch(
+                message=payload.message,
+                pond_id=payload.pond_id,
+                context=context,
+            )
+
+            time_window_summary = build_time_window_summary(context)
 
             audit_log_id = await create_ai_audit_log(
                 request_id=request_id,
@@ -251,11 +241,13 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 "time_window_suggestions": context.get("time_window_suggestions", []),
                 "conversation_history_count": len(conversation_history),
                 "conversation_history_stats": conversation_history_stats,
-                "session_summary_present": _has_meaningful_session_summary(session_summary_state),
+                "session_summary_present": has_meaningful_session_summary(session_summary_state),
                 "session_summary_json_version": session_summary_state.get("version"),
                 "session_summary_goal": session_summary_state.get("current_goal"),
                 "session_summary_recent_topics": session_summary_state.get("recent_topics", []),
                 "session_summary_time_preferences": session_summary_state.get("time_preferences", {}),
+                "autonomous_time_window_fetch": autonomous_fetch_summary,
+                "autonomous_time_window_trend": context.get("autonomous_time_window_trend", {}),
             }
 
             if payload.enable_web_search:
@@ -266,14 +258,12 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 )
                 source_payload["web_search_sources"] = web_search_sources
                 yield format_sse("source", source_payload)
-
                 async for token in yield_text_in_chunks(output_text):
                     final_content.append(token)
                     yield format_sse("token", {"content": token})
             else:
                 source_payload["web_search_sources"] = []
                 yield format_sse("source", source_payload)
-
                 async for token in stream_chat_tokens(
                     payload.message,
                     context,
@@ -305,9 +295,11 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                     "time_window_suggestions": context.get("time_window_suggestions", []),
                     "conversation_history_count": len(conversation_history),
                     "conversation_history_stats": conversation_history_stats,
-                    "session_summary_present": _has_meaningful_session_summary(session_summary_state),
+                    "session_summary_present": has_meaningful_session_summary(session_summary_state),
                     "session_summary_json_version": session_summary_state.get("version"),
                     "web_search_sources": web_search_sources,
+                    "autonomous_time_window_fetch": autonomous_fetch_summary,
+                    "autonomous_time_window_trend": context.get("autonomous_time_window_trend", {}),
                 },
             )
 

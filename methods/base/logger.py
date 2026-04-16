@@ -9,7 +9,7 @@ def get_formatted_date() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _safe_json(data: Any) -> str:
+def safe_json(data: Any) -> str:
     try:
         return json.dumps(data, ensure_ascii=False, default=str)
     except Exception:
@@ -31,7 +31,7 @@ def error(actor: str, err: Exception, req: Any = None, extra: Any = None) -> Non
     if req is not None and getattr(req, "client", None) and getattr(req.client, "host", None):
         ip = f"[{req.client.host}]"
 
-    extra_part = f"[額外資料: {_safe_json(extra)}]" if extra is not None else ""
+    extra_part = f"[額外資料: {safe_json(extra)}]" if extra is not None else ""
     message = (
         f"\n[ERROR][{actor}]{ip}[{get_formatted_date()}]{extra_part}\n"
         f"錯誤簡述: \"{str(err)}\"\n"
