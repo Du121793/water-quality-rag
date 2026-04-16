@@ -6,11 +6,15 @@ from SQL_Controller.sensor_data import (
     get_multi_metric_range_summary_by_pond,
     get_multi_metric_trend_range_by_pond,
 )
-from methods.ai.time_window_query import TimeWindowQuery, parse_time_window_query
+from methods.ai.time_window_query import (
+    TimeWindowQuery,
+    build_time_window_query,
+    parse_time_window_query,
+)
 from methods.base.serializer import to_jsonable
 
 
-def _build_metric_comparison(current_summary: dict, previous_summary: dict) -> dict:
+def build_metric_comparison(current_summary: dict, previous_summary: dict) -> dict:
     current_avg = current_summary.get("avg_value")
     previous_avg = previous_summary.get("avg_value")
     delta = None
@@ -29,55 +33,12 @@ def _build_metric_comparison(current_summary: dict, previous_summary: dict) -> d
     }
 
 
-async def _build_single_window_payload(pond_id: int, query: TimeWindowQuery) -> dict:
-    summaries = await get_multi_metric_range_summary_by_pond(
-        pond_id=pond_id,
-        metrics=query.metrics,
-        from_at=query.from_at,
-        to_at=query.to_at,
-    )
-    series = await get_multi_metric_trend_range_by_pond(
-        pond_id=pond_id,
-        metrics=query.metrics,
-        from_at=query.from_at,
-        to_at=query.to_at,
-        bucket=query.bucket,
-    )
-
-    return to_jsonable(
-        {
-            "mode": "single",
-            "requested": True,
-            "matched_by": query.matched_by,
-            "from_at": query.from_at,
-            "to_at": query.to_at,
-            "metrics": query.metrics,
-            "bucket": query.bucket,
-            "requested_bucket": query.requested_bucket,
-            "was_capped": query.was_capped,
-            "original_days": query.original_days,
-            "adjusted_days": query.adjusted_days,
-            "summary": summaries,
-            "series": series,
-        }
-    )
-
-
-async def _build_comparison_payload(pond_id: int, query: TimeWindowQuery) -> dict:
-    assert query.previous_from_at is not None
-    assert query.previous_to_at is not None
-
+async def build_time_window_context_from_query(pond_id: int, query: TimeWindowQuery) -> dict:
     current_summaries = await get_multi_metric_range_summary_by_pond(
         pond_id=pond_id,
         metrics=query.metrics,
         from_at=query.from_at,
         to_at=query.to_at,
-    )
-    previous_summaries = await get_multi_metric_range_summary_by_pond(
-        pond_id=pond_id,
-        metrics=query.metrics,
-        from_at=query.previous_from_at,
-        to_at=query.previous_to_at,
     )
     current_series = await get_multi_metric_trend_range_by_pond(
         pond_id=pond_id,
@@ -86,23 +47,45 @@ async def _build_comparison_payload(pond_id: int, query: TimeWindowQuery) -> dic
         to_at=query.to_at,
         bucket=query.bucket,
     )
-    previous_series = await get_multi_metric_trend_range_by_pond(
-        pond_id=pond_id,
-        metrics=query.metrics,
-        from_at=query.previous_from_at,
-        to_at=query.previous_to_at,
-        bucket=query.bucket,
-    )
 
-    comparison: dict[str, dict] = {}
-    for metric in query.metrics:
-        comparison[metric] = _build_metric_comparison(
-            current_summaries.get(metric, {}),
-            previous_summaries.get(metric, {}),
+    payload: dict = {
+        "mode": "single",
+        "requested": True,
+        "matched_by": query.matched_by,
+        "from_at": query.from_at,
+        "to_at": query.to_at,
+        "metrics": query.metrics,
+        "bucket": query.bucket,
+        "requested_bucket": query.requested_bucket,
+        "was_capped": query.was_capped,
+        "original_days": query.original_days,
+        "adjusted_days": query.adjusted_days,
+        "summary": current_summaries,
+        "series": current_series,
+    }
+
+    if query.compare_previous_window and query.previous_from_at and query.previous_to_at:
+        previous_summaries = await get_multi_metric_range_summary_by_pond(
+            pond_id=pond_id,
+            metrics=query.metrics,
+            from_at=query.previous_from_at,
+            to_at=query.previous_to_at,
         )
+        previous_series = await get_multi_metric_trend_range_by_pond(
+            pond_id=pond_id,
+            metrics=query.metrics,
+            from_at=query.previous_from_at,
+            to_at=query.previous_to_at,
+            bucket=query.bucket,
+        )
+        comparison: dict[str, dict] = {}
+        for metric in query.metrics:
+            comparison[metric] = build_metric_comparison(
+                current_summaries.get(metric, {}),
+                previous_summaries.get(metric, {}),
+            )
 
-    return to_jsonable(
-        {
+        payload = {
             "mode": "comparison",
             "requested": True,
             "matched_by": query.matched_by,
@@ -127,7 +110,35 @@ async def _build_comparison_payload(pond_id: int, query: TimeWindowQuery) -> dic
             },
             "comparison": comparison,
         }
+
+    return to_jsonable(payload)
+
+
+async def build_explicit_time_window_context(
+    pond_id: int,
+    *,
+    from_at: datetime,
+    to_at: datetime,
+    metrics: list[str] | None = None,
+    bucket: str | None = None,
+    compare_previous_window: bool = False,
+    previous_from_at: datetime | None = None,
+    previous_to_at: datetime | None = None,
+    matched_by: str = "explicit_time_window",
+    comparison_matched_by: str | None = None,
+) -> dict:
+    query = build_time_window_query(
+        from_at=from_at,
+        to_at=to_at,
+        metrics=metrics,
+        bucket=bucket,
+        compare_previous_window=compare_previous_window,
+        previous_from_at=previous_from_at,
+        previous_to_at=previous_to_at,
+        matched_by=matched_by,
+        comparison_matched_by=comparison_matched_by,
     )
+    return await build_time_window_context_from_query(pond_id, query)
 
 
 async def build_time_window_context(
@@ -147,8 +158,4 @@ async def build_time_window_context(
     )
     if parsed is None:
         return None
-
-    if parsed.compare_previous_window and parsed.previous_from_at and parsed.previous_to_at:
-        return await _build_comparison_payload(pond_id, parsed)
-
-    return await _build_single_window_payload(pond_id, parsed)
+    return await build_time_window_context_from_query(pond_id, parsed)

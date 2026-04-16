@@ -22,7 +22,7 @@ except Exception:
     TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
 
 
-def _cache_key(
+def cache_key(
     user_id: int,
     pond_id: int,
     message: str,
@@ -40,14 +40,14 @@ def _cache_key(
     return f"{settings.redis_key_prefix}:pond-context:{user_id}:{pond_id}:{message_hash}"
 
 
-def _average_metric(rows: list[dict], key: str) -> float | None:
+def average_metric(rows: list[dict], key: str) -> float | None:
     values = [float(row[key]) for row in rows if row.get(key) is not None]
     if not values:
         return None
     return round(sum(values) / len(values), 2)
 
 
-def _summarize_trend(rows: list[dict]) -> dict:
+def summarize_trend(rows: list[dict]) -> dict:
     values: list[float] = []
     min_row: dict | None = None
     max_row: dict | None = None
@@ -56,7 +56,6 @@ def _summarize_trend(rows: list[dict]) -> dict:
         avg_value = row.get("avg_value")
         if avg_value is None:
             continue
-
         current_value = float(avg_value)
         values.append(current_value)
 
@@ -76,7 +75,6 @@ def _summarize_trend(rows: list[dict]) -> dict:
     if min_row is not None:
         summary["min_bucket_at"] = min_row.get("bucket_at")
         summary["min_bucket_avg"] = round(float(min_row["avg_value"]), 2)
-
     if max_row is not None:
         summary["max_bucket_at"] = max_row.get("bucket_at")
         summary["max_bucket_avg"] = round(float(max_row["avg_value"]), 2)
@@ -84,7 +82,7 @@ def _summarize_trend(rows: list[dict]) -> dict:
     return summary
 
 
-def _needs_time_window_selection(
+def needs_time_window_selection(
     message: str,
     explicit_from: datetime | None,
     explicit_to: datetime | None,
@@ -102,46 +100,48 @@ def _needs_time_window_selection(
         "變化",
         "波動",
         "比較",
-        "分析",
+        "一天內",
+        "最近",
         "昨天",
         "今天",
-        "一天內",
+        "那天",
+        "當天",
         "上週",
-        "最近",
-        "區間",
-        "時間",
+        "日夜",
+        "白天",
+        "晚上",
     )
     lowered = (message or "").lower()
     return any(keyword in message or keyword in lowered for keyword in hint_keywords)
 
 
-def _build_time_window_suggestions() -> list[dict]:
+def build_time_window_suggestions() -> list[dict]:
     now = datetime.now(TAIPEI_TIMEZONE)
     return [
         {
             "label": "最近 24 小時",
-            "description": "適合看日內波動與白天晚上差異。",
+            "description": "查看日內波動與白天晚上差異。",
             "from_at": (now - timedelta(days=1)).isoformat(),
             "to_at": now.isoformat(),
             "bucket": "10m",
         },
         {
             "label": "最近 7 天",
-            "description": "適合看一週內趨勢與異常波動。",
+            "description": "查看近一週趨勢與異常變化。",
             "from_at": (now - timedelta(days=7)).isoformat(),
             "to_at": now.isoformat(),
             "bucket": "hour",
         },
         {
             "label": "最近 30 天",
-            "description": "適合看長週期變化與季節性偏移。",
+            "description": "查看較長期趨勢與季節性變化。",
             "from_at": (now - timedelta(days=30)).isoformat(),
             "to_at": now.isoformat(),
             "bucket": "day",
         },
         {
             "label": "自訂時間",
-            "description": "由使用者指定起訖時間與分析範圍。",
+            "description": "由前端日期選擇器指定起訖時間。",
             "requires_user_selection": True,
         },
     ]
@@ -157,7 +157,7 @@ async def build_pond_context(
     compare_previous_window: bool = False,
     session_summary_state: dict | None = None,
 ) -> dict:
-    cache_key = _cache_key(
+    key = cache_key(
         user_id=user_id,
         pond_id=pond_id,
         message=message,
@@ -167,13 +167,13 @@ async def build_pond_context(
         compare_previous_window=compare_previous_window,
     )
     if redis_client is not None:
-        cached = await redis_client.get(cache_key)
+        cached = await redis_client.get(key)
         if cached:
             return json.loads(cached)
 
     pond = await get_user_pond_by_id(user_id, pond_id)
     if pond is None:
-        raise ValueError("找不到該魚池，或使用者沒有此魚池的權限。")
+        raise ValueError("找不到指定魚池，或你沒有權限查看此魚池。")
 
     latest_rows = await get_latest_sensor_status_by_pond(pond_id)
     do_trend_hour = await get_metric_trend_by_pond(pond_id, "do_mg_l", hours=24, bucket="hour")
@@ -191,14 +191,14 @@ async def build_pond_context(
         session_summary_state=session_summary_state,
     )
 
-    time_window_suggestions = []
-    if time_window_trend is None and _needs_time_window_selection(
+    time_window_suggestions: list[dict] = []
+    if time_window_trend is None and needs_time_window_selection(
         message,
         time_window_from,
         time_window_to,
         session_summary_state,
     ):
-        time_window_suggestions = _build_time_window_suggestions()
+        time_window_suggestions = build_time_window_suggestions()
 
     if use_rag:
         rag_result = await search_related_paper_context(
@@ -227,10 +227,10 @@ async def build_pond_context(
         "pond": pond,
         "latest_status": {
             "sensor_count": len(latest_rows),
-            "dissolved_oxygen_avg": _average_metric(latest_rows, "do_mg_l"),
-            "ph_avg": _average_metric(latest_rows, "ph"),
-            "temp_deep_avg": _average_metric(latest_rows, "temp_deep"),
-            "temp_shallow_avg": _average_metric(latest_rows, "temp_shallow"),
+            "dissolved_oxygen_avg": average_metric(latest_rows, "do_mg_l"),
+            "ph_avg": average_metric(latest_rows, "ph"),
+            "temp_deep_avg": average_metric(latest_rows, "temp_deep"),
+            "temp_shallow_avg": average_metric(latest_rows, "temp_shallow"),
             "rows": latest_rows,
         },
         "trend": {
@@ -238,22 +238,25 @@ async def build_pond_context(
                 "hourly": do_trend_hour,
                 "ten_minute": do_trend_10m,
                 "summary": {
-                    "hourly": _summarize_trend(do_trend_hour),
-                    "ten_minute": _summarize_trend(do_trend_10m),
+                    "hourly": summarize_trend(do_trend_hour),
+                    "ten_minute": summarize_trend(do_trend_10m),
                 },
             },
             "ph": {
                 "hourly": ph_trend_hour,
                 "ten_minute": ph_trend_10m,
                 "summary": {
-                    "hourly": _summarize_trend(ph_trend_hour),
-                    "ten_minute": _summarize_trend(ph_trend_10m),
+                    "hourly": summarize_trend(ph_trend_hour),
+                    "ten_minute": summarize_trend(ph_trend_10m),
                 },
             },
         },
         "time_window_trend": time_window_trend or {
             "requested": False,
             "data": {},
+        },
+        "autonomous_time_window_trend": {
+            "requested": False,
         },
         "time_window_suggestions": time_window_suggestions,
         "daily_logs": daily_logs,
@@ -263,12 +266,10 @@ async def build_pond_context(
     }
 
     jsonable_context = to_jsonable(context)
-
     if redis_client is not None:
         await redis_client.set(
-            cache_key,
+            key,
             json.dumps(jsonable_context, ensure_ascii=False),
             ex=settings.cache_ttl_latest_summary,
         )
-
     return jsonable_context
