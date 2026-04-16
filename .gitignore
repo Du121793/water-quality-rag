@@ -3,4 +3,7 @@ __pycache__/
 .venv/
 .env
 uploads/
+agent.md
 scripts/
+papers/*
+!papers/.gitkeep
