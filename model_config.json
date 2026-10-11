@@ -1,0 +1,81 @@
+{
+  "gpt-5.4": {
+    "provider": "openai",
+    "enabled": true,
+    "supports_deep_thinking": true,
+    "thinking_type": "openai_effort",
+    "deep_thinking_level": "high",
+    "supports_multimodal": true,
+    "disallow_temperature": true,
+    "family": "gpt-5.4"
+  },
+  "gpt-5.4-mini": {
+    "provider": "openai",
+    "enabled": true,
+    "supports_deep_thinking": true,
+    "thinking_type": "openai_effort",
+    "deep_thinking_level": "medium",
+    "supports_multimodal": true,
+    "disallow_temperature": true,
+    "family": "gpt-5.4"
+  },
+  "gpt-5.4-nano": {
+    "provider": "openai",
+    "enabled": true,
+    "supports_deep_thinking": true,
+    "thinking_type": "openai_effort",
+    "deep_thinking_level": "high",
+    "supports_multimodal": true,
+    "disallow_temperature": true,
+    "family": "gpt-5.4"
+  },
+  "qwen2.5:7b-instruct": {
+    "provider": "ollama",
+    "enabled": false,
+    "supports_deep_thinking": false,
+    "thinking_type": "none",
+    "supports_multimodal": false,
+    "disallow_temperature": false,
+    "family": "qwen2.5"
+  },
+  "gemini-2.5-pro": {
+    "provider": "gemini",
+    "enabled": false,
+    "supports_deep_thinking": true,
+    "thinking_type": "gemini_budget",
+    "deep_thinking_level": "high",
+    "supports_multimodal": true,
+    "disallow_temperature": false,
+    "family": "gemini-2.5"
+  },
+  "gemini-2.5-flash": {
+    "provider": "gemini",
+    "enabled": false,
+    "supports_deep_thinking": true,
+    "thinking_type": "gemini_budget",
+    "deep_thinking_level": "medium",
+    "supports_multimodal": true,
+    "disallow_temperature": false,
+    "family": "gemini-2.5"
+  },
+  "gemini-3.1-pro-preview": {
+    "provider": "gemini",
+    "enabled": true,
+    "supports_deep_thinking": true,
+    "thinking_type": "gemini_level",
+    "deep_thinking_level": "high",
+    "supports_multimodal": true,
+    "disallow_temperature": true,
+    "family": "gemini-3"
+  },
+  "gemini-3.1-flash-preview": {
+    "provider": "gemini",
+    "enabled": true,
+    "supports_deep_thinking": true,
+    "thinking_type": "gemini_level",
+    "deep_thinking_level": "medium",
+    "supports_multimodal": true,
+    "disallow_temperature": true,
+    "family": "gemini-3"
+  }
+}

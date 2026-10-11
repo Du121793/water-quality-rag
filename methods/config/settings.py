@@ -62,13 +62,25 @@ class Settings:
     expected_jwt_issuer: str = os.getenv("EXPECTED_JWT_ISSUER", "").strip()
     expected_jwt_audience: str = os.getenv("EXPECTED_JWT_AUDIENCE", "").strip()
 
-    llm_provider: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-    llm_base_url: str = _normalized_url(os.getenv("LLM_BASE_URL"), "https://api.openai.com/v1")
-    llm_api_key: str = os.getenv("LLM_API_KEY", "")
-    llm_model: str = os.getenv("LLM_MODEL", "gpt-4.1-mini")
+    llm_default_model: str = os.getenv("LLM_DEFAULT_MODEL", "gpt-5.4-nano")
     llm_temperature: float = _as_float(os.getenv("LLM_TEMPERATURE"), 0.2)
     llm_max_retries: int = _as_int(os.getenv("LLM_MAX_RETRIES"), 2)
     llm_retry_base_seconds: float = _as_float(os.getenv("LLM_RETRY_BASE_SECONDS"), 2.0)
+
+    # Multi-Provider Settings
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_base_url: str = _normalized_url(os.getenv("OPENAI_BASE_URL"), "https://api.openai.com/v1")
+    
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_base_url: str = _normalized_url(os.getenv("GEMINI_BASE_URL"), "https://generativelanguage.googleapis.com/v1beta")
+    
+    ollama_api_key: str = os.getenv("OLLAMA_API_KEY", "")
+    ollama_base_url: str = _normalized_url(os.getenv("OLLAMA_BASE_URL"), "http://localhost:11434/v1")
+
+    # Fallback / Legacy (keep for compatibility)
+    llm_provider: str = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    llm_base_url: str = _normalized_url(os.getenv("LLM_BASE_URL"), "https://api.openai.com/v1")
+    llm_api_key: str = os.getenv("LLM_API_KEY", "")
 
     embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", os.getenv("LLM_PROVIDER", "ollama")).strip().lower()
     embedding_base_url: str = _normalized_url(

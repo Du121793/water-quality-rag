@@ -30,6 +30,7 @@ from methods.base.logger import error, info, warn
 from methods.base.schemas import ChatStreamRequest
 from methods.base.sse import format_sse
 from methods.config.settings import settings
+from methods.config.model_config import load_config
 
 router = APIRouter()
 
@@ -124,12 +125,20 @@ async def remove_session(
     return {"success": True, "message": "Session deleted."}
 
 
+@router.get("/models")
+async def list_available_models():
+    config = load_config()
+    enabled_models = {k: v for k, v in config.items() if v.get("enabled")}
+    return {"success": True, "data": enabled_models}
+
+
 @router.post("/chat/stream")
 async def chat_stream(request: Request, payload: ChatStreamRequest):
     user_id = await resolve_web_user_id(request, payload.user_id)
     request_id = str(uuid.uuid4())
     session_id = payload.session_id or str(uuid.uuid4())
     session_title = payload.message[:80]
+    target_model = payload.model or settings.llm_default_model
 
     async def event_generator():
         audit_log_id = None
@@ -185,9 +194,12 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 message=payload.message,
                 metadata={
                     "request_id": request_id,
+                    "model": target_model,
                     "time_window_from": payload.time_window_from,
                     "time_window_to": payload.time_window_to,
                     "compare_previous_window": payload.compare_previous_window,
+                    "deep_thinking": payload.deep_thinking,
+                    "has_attachments": len(payload.attachments) > 0,
                 },
             )
 
@@ -202,6 +214,7 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 session_summary_state=session_summary_state,
             )
             context["use_rag"] = payload.use_rag
+            context["deep_thinking"] = payload.deep_thinking
             context["enable_web_search"] = payload.enable_web_search
             context["enable_assistant_ui"] = payload.enable_assistant_ui
             context["session_summary_json"] = session_summary_state
@@ -228,13 +241,17 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
             )
 
             yield format_sse("start", {"request_id": request_id, "session_id": session_id})
+            # 發送初步心跳，維持連線穩定
+            yield format_sse("ping", {"message": "正在準備數據與思考中..."})
 
             source_payload = {
                 "pond_name": context["pond"]["pond_name"],
+                "model": target_model,
                 "paper_count": len(context["rag_references"]),
                 "citations": context.get("citations", []),
                 "rag_retrieval": context.get("rag_retrieval", {}),
                 "use_rag": payload.use_rag,
+                "deep_thinking": payload.deep_thinking,
                 "enable_web_search": payload.enable_web_search,
                 "enable_assistant_ui": payload.enable_assistant_ui,
                 "time_window_query": time_window_summary,
@@ -254,6 +271,7 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 output_text, web_search_sources = await generate_web_search_response(
                     payload.message,
                     context,
+                    model=target_model,
                     enable_assistant_ui=payload.enable_assistant_ui,
                 )
                 source_payload["web_search_sources"] = web_search_sources
@@ -267,6 +285,9 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 async for token in stream_chat_tokens(
                     payload.message,
                     context,
+                    model=target_model,
+                    attachments=payload.attachments,
+                    deep_thinking=payload.deep_thinking,
                     enable_web_search=payload.enable_web_search,
                     enable_assistant_ui=payload.enable_assistant_ui,
                 ):
@@ -285,10 +306,12 @@ async def chat_stream(request: Request, payload: ChatStreamRequest):
                 message=final_text,
                 metadata={
                     "request_id": request_id,
+                    "model": target_model,
                     "citations": context.get("citations", []),
                     "pond_id": payload.pond_id,
                     "rag_retrieval": context.get("rag_retrieval", {}),
                     "use_rag": payload.use_rag,
+                    "deep_thinking": payload.deep_thinking,
                     "enable_web_search": payload.enable_web_search,
                     "enable_assistant_ui": payload.enable_assistant_ui,
                     "time_window_query": time_window_summary,
