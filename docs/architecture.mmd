@@ -1,0 +1,15 @@
+%% 根據此版本程式的責任與相依繪製，不代表已完成外部服務或硬體驗收
+flowchart TB
+  CLIENT["魚塭後端或 API Client<br/>JWT / 問題 / 魚池 / 附件"] --> API["FastAPI 路由<br/>身分 / Session / SSE"]
+  API --> CHAT["對話編排<br/>記憶 / 時間窗 / 自主補查"]
+  CHAT <-->|"量測 / 日誌 / 權限"| MAINDB[("主 PostgreSQL<br/>魚塭資料")]
+  CHAT <--> REDIS[("Redis<br/>資訊與檢索快取")]
+  CHAT --> SEARCH["論文檢索<br/>向量 / 鄰近片段 / 引用"]
+  SEARCH <--> AIDB[("AI PostgreSQL / pgvector<br/>論文 / 向量 / Session / 稽核")]
+  CHAT --> LLM["聊天模型 Provider<br/>OpenAI / Gemini / 相容服務"]
+  LLM -->|"回覆串流"| API
+  API -->|"來源 / token / 狀態"| CLIENT
+  PDF["有權使用的 PDF / INDEX<br/>來源與中繼資料"] --> INGEST["論文匯入<br/>擷取 / 切塊 / 重複判定"]
+  INGEST --> EMBED["Embedding Provider<br/>獨立模型設定"]
+  INGEST --> AIDB
+  EMBED --> AIDB
