@@ -39,7 +39,7 @@ pip install -r requirements.txt
 LLM_PROVIDER=ollama
 LLM_BASE_URL=http://127.0.0.1:11434/v1
 LLM_API_KEY=
-LLM_MODEL=qwen2.5:7b-instruct
+LLM_DEFAULT_MODEL=qwen2.5:7b-instruct
 ```
 
 ### OpenAI
@@ -48,7 +48,7 @@ LLM_MODEL=qwen2.5:7b-instruct
 LLM_PROVIDER=openai
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=your-openai-api-key
-LLM_MODEL=gpt-4.1-mini
+LLM_DEFAULT_MODEL=gpt-5.4-nano
 ```
 
 ### Gemini
@@ -57,7 +57,7 @@ LLM_MODEL=gpt-4.1-mini
 LLM_PROVIDER=gemini
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 LLM_API_KEY=your-gemini-api-key
-LLM_MODEL=gemini-2.5-flash
+LLM_DEFAULT_MODEL=gemini-3-flash
 ```
 
 ## 4. Embedding Provider 設定
@@ -94,7 +94,17 @@ EMBEDDING_MODEL=text-embedding-004
 EMBEDDING_DIMENSIONS=768
 ```
 
-## 5. 啟動 AI 向量資料庫
+## 5. 模型能力配置 (model_config.json)
+
+專案根目錄下必須存在 `model_config.json` 檔案。此檔案負責定義各個模型是否啟用，以及其支援的進階功能（例如深度思考與多模態）。
+
+- **切換可用模型**：將模型屬性中的 `"enabled": true` 即可讓該模型在前端列表中出現。
+- **深度思考 (Deep Thinking)**：透過 `"supports_deep_thinking": true` 及 `"deep_thinking_level"` 來控制各模型的預設思考強度。
+- **多模態 (Multimodal)**：透過 `"supports_multimodal": true` 控制是否允許圖片/檔案上傳。
+
+**注意**：`.env` 中的 `LLM_DEFAULT_MODEL` 必須是 `model_config.json` 中有定義且 `enabled` 為 `true` 的模型。
+
+## 6. 啟動 AI 向量資料庫
 
 本專案建議主資料庫維持既有 Patroni 叢集不動，AI 向量資料庫獨立以 Docker 部署。
 
@@ -109,13 +119,13 @@ docker compose -f docker-compose.ai-db.yml up -d
 - Database: `ai_helper_db`
 - User: `dev`
 
-## 6. 建立 AI DB Schema
+## 7. 建立 AI DB Schema
 
 ```bash
 psql postgresql://dev:asdasd@127.0.0.1:5433/ai_helper_db -f build/buildDB.sql
 ```
 
-## 7. 匯入論文與建立向量
+## 8. 匯入論文與建立向量
 
 先匯入 PDF 文字：
 
@@ -129,7 +139,7 @@ psql postgresql://dev:asdasd@127.0.0.1:5433/ai_helper_db -f build/buildDB.sql
 .venv\Scripts\python scripts/embed_paper_chunks.py
 ```
 
-## 8. Redis
+## 9. Redis
 
 Redis 為必要元件，用於：
 
@@ -137,13 +147,14 @@ Redis 為必要元件，用於：
 - RAG 查詢結果快取
 - 降低重複查詢主資料庫與 AI DB 的成本
 
-## 9. 啟動服務
+## 10. 啟動服務
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## 10. 驗證端點
+## 11. 驗證端點
 
 - `GET /api/system/health`
+- `GET /api/ai/models`
 - `POST /api/ai/chat/stream`
