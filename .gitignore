@@ -7,3 +7,21 @@ agent.md
 scripts/
 papers/*
 !papers/.gitkeep
+
+# 本機設定與私密檔案
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+credentials.json
+secrets.json
+# 依賴與快取
+node_modules/
+__pycache__/
+*.pyc
+.venv/
