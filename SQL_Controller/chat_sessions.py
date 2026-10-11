@@ -99,6 +99,7 @@ async def create_chat_session(
     normalized_title = _normalize_text(title)
 
     if has_summary_json:
+        summary_json_payload = to_jsonable(summary_json or {})
         row = await fetchrow_ai(
             """
             INSERT INTO chat_sessions (
@@ -119,7 +120,7 @@ async def create_chat_session(
             pond_id,
             normalized_title,
             summary,
-            json.dumps(summary_json or {}, ensure_ascii=False),
+            json.dumps(summary_json_payload, ensure_ascii=False),
         )
     else:
         row = await fetchrow_ai(
@@ -205,6 +206,7 @@ async def update_chat_session_summary(
 ) -> None:
     has_summary_json = await _supports_summary_json()
     if has_summary_json:
+        summary_json_payload = to_jsonable(summary_json or {})
         await execute_ai(
             """
             UPDATE chat_sessions
@@ -216,7 +218,7 @@ async def update_chat_session_summary(
             """,
             session_id,
             summary_text,
-            json.dumps(summary_json or {}, ensure_ascii=False),
+            json.dumps(summary_json_payload, ensure_ascii=False),
         )
         return
 
@@ -293,7 +295,7 @@ async def insert_chat_message(
     message: str,
     metadata: dict[str, Any] | None = None,
 ) -> int:
-    metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+    metadata_json = json.dumps(to_jsonable(metadata or {}), ensure_ascii=False)
     row = await fetchrow_ai(
         """
         INSERT INTO chat_messages (

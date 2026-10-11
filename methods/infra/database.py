@@ -8,20 +8,29 @@ from methods.config.settings import settings
 main_db_pool: asyncpg.Pool | None = None
 ai_db_pool: asyncpg.Pool | None = None
 
-
 def _build_pool_kwargs(
-    dsn: str,
-    host: str,
-    port: int,
-    database: str,
-    user: str,
-    password: str,
-    ssl_enabled: bool,
+    *,
+    dsn: str | None = None,
+    host: str | None = None,
+    port: int = 5432,
+    database: str | None = None,
+    user: str | None = None,
+    password: str | None = None,
+    ssl_enabled: bool = False,
 ) -> dict:
+
+    import ssl
+
+    ssl_context = False
+    if ssl_enabled:
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
     if dsn:
         return {
             "dsn": dsn,
-            "ssl": ssl_enabled,
+            "ssl": ssl_context,
             "min_size": 1,
             "max_size": 10,
         }
@@ -35,7 +44,7 @@ def _build_pool_kwargs(
         "database": database,
         "user": user,
         "password": password,
-        "ssl": ssl_enabled,
+        "ssl": ssl_context,
         "min_size": 1,
         "max_size": 10,
     }
