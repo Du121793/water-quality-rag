@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class Attachment(BaseModel):
+    name: str | None = Field(default=None, description="原始附件檔案名稱。")
     type: str = Field(description="附件類型，如 'image' 或 'file'。")
     mime_type: str | None = Field(default=None, description="MIME 類型，例如 'image/png'。")
     data: str | None = Field(default=None, description="Base64 編碼的內容。")

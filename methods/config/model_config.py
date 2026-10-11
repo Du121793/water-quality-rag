@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Any, TypedDict
 
 class ModelCapability(TypedDict):
@@ -13,7 +14,8 @@ class ModelCapability(TypedDict):
     family: str
 
 def load_config() -> dict[str, ModelCapability]:
-    config_path = os.path.join(os.getcwd(), "model_config.json")
+    # 設定位置固定在專案根目錄，避免從其他目錄啟動時讀不到模型。
+    config_path = Path(__file__).resolve().parents[2] / "model_config.json"
     if not os.path.exists(config_path):
         return {}
     try:

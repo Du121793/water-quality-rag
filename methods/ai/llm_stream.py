@@ -62,8 +62,20 @@ def build_openai_user_parts(message: str, context: dict, attachments: list[Attac
                         "type": "file",
                         "file": {"file_id": att.url}
                     })
+                elif att.data:
+                    # Chat Completions 的檔案輸入使用 PDF 的 data URL。
+                    mime = att.mime_type or "application/pdf"
+                    if mime != "application/pdf":
+                        raise ValueError("此模型的檔案輸入目前只支援 PDF，請改用 PDF 附件。")
+                    parts.append({
+                        "type": "file",
+                        "file": {
+                            "filename": att.name or "attachment.pdf",
+                            "file_data": f"data:{mime};base64,{att.data}",
+                        },
+                    })
                 else:
-                    continue
+                    raise ValueError("檔案附件缺少內容或有效的檔案 ID。")
     return parts
 
 
@@ -260,9 +272,9 @@ async def stream_openai_compatible(
         ],
     }
     
-    # 修改：根據您提供的規格使用 "reasoning": {"effort": ...}
+    # Chat Completions 使用 reasoning_effort，與 Responses 的欄位不同。
     if deep_thinking and capability.get("enabled") and capability.get("supports_deep_thinking") and capability.get("thinking_type") == "openai_effort":
-        payload["reasoning"] = {"effort": deep_thinking_level}
+        payload["reasoning_effort"] = deep_thinking_level
         
     if not capability.get("disallow_temperature", False):
         payload["temperature"] = settings.llm_temperature
